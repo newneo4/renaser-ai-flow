@@ -1,0 +1,358 @@
+{
+  "id": "renaserFlujo0001",
+  "name": "01 · Registro → Clasificación → Seguimiento",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Flujo 01 · Registro y seguimiento\n1. **Formulario** (registro ficticio)\n2. **Clasificar** por reglas\n3. **Upsert** en Postgres (mini-CRM)\n4. Si ya está confirmado → no reenviar\n5. **Correo** según clasificación (Mailpit)\n6. Etapa **Nuevo → Contactado**",
+        "width": 420,
+        "height": 220,
+        "color": 7
+      },
+      "id": "f1-note-01",
+      "name": "Nota 01",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Regístrate al evento Renaser",
+        "formDescription": "Déjanos tus datos y te enviaremos la información para asegurar tu lugar.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Nombre completo",
+              "fieldName": "nombre",
+              "requiredField": true,
+              "placeholder": "Ej. Ana Torres"
+            },
+            {
+              "fieldLabel": "Email",
+              "fieldName": "email",
+              "fieldType": "email",
+              "requiredField": true,
+              "placeholder": "ana@correo.com"
+            },
+            {
+              "fieldLabel": "Teléfono / WhatsApp",
+              "fieldName": "telefono",
+              "placeholder": "+51 999 999 999"
+            },
+            {
+              "fieldLabel": "¿Qué tanto te interesa el evento?",
+              "fieldName": "interes",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Alto"
+                  },
+                  {
+                    "option": "Medio"
+                  },
+                  {
+                    "option": "Bajo"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "¿Puedes asistir en la fecha del evento?",
+              "fieldName": "disponibilidad",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Sí"
+                  },
+                  {
+                    "option": "Tal vez"
+                  },
+                  {
+                    "option": "No"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "¿Cómo te enteraste?",
+              "fieldName": "canal",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Referido"
+                  },
+                  {
+                    "option": "WhatsApp"
+                  },
+                  {
+                    "option": "Formulario web"
+                  },
+                  {
+                    "option": "Redes sociales"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "path": "registro",
+          "appendAttribution": false,
+          "buttonLabel": "Registrarme",
+          "respondWithOptions": {
+            "values": {
+              "respondWith": "text",
+              "formSubmittedText": "¡Gracias! Revisa tu correo: te enviamos los siguientes pasos."
+            }
+          }
+        }
+      },
+      "id": "f1-form-trigger",
+      "name": "Formulario de registro",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "7b1f3c2a-5d8e-4f6a-9b0c-1e2d3f4a5b6c"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Clasificación por reglas (determinística, explicable, sin costo).\n// Puntaje = interés + disponibilidad + canal  →  Caliente / Tibio / Frío\n//\n// NOTA: el Form Trigger de n8n v2 expone los datos usando el fieldLabel\n// como clave (ej. \"¿Qué tanto te interesa el evento?\").\n// Se normaliza aquí a claves cortas antes de puntuar.\nconst raw = $json;\n\n// Mapa field-N (posícional) → clave corta\n// El Form Trigger v2.3+ expone los datos con claves field-0, field-1...\n// en el orden en que se definieron los campos en el formulario.\nconst MAP = {\n  'field-0': 'nombre',\n  'field-1': 'email',\n  'field-2': 'telefono',\n  'field-3': 'interes',\n  'field-4': 'disponibilidad',\n  'field-5': 'canal',\n};\n\nconst d = {};\nfor (const [k, v] of Object.entries(raw)) {\n  const shortKey = MAP[k] ?? k;\n  d[shortKey] = v;\n}\n\nconst PESOS = {\n  interes:        { 'Alto': 40, 'Medio': 20, 'Bajo': 5 },\n  disponibilidad: { 'Sí': 40, 'Tal vez': 15, 'No': 0 },\n  canal:          { 'Referido': 20, 'WhatsApp': 15, 'Formulario web': 10, 'Redes sociales': 5 },\n};\n\nconst p = (campo) => PESOS[campo]?.[d[campo]] ?? 0;\n\nconst puntaje = p('interes') + p('disponibilidad') + p('canal');\nconst clasificacion = puntaje >= 70 ? 'Caliente' : puntaje >= 40 ? 'Tibio' : 'Frío';\n\nreturn {\n  json: {\n    nombre: String(d.nombre ?? '').trim(),\n    email: String(d.email ?? '').trim().toLowerCase(),\n    telefono: String(d.telefono ?? '').trim() || null,\n    interes: d.interes,\n    disponibilidad: d.disponibilidad,\n    canal: d.canal,\n    puntaje,\n    clasificacion,\n  },\n};\n"
+      },
+      "id": "f1-code-clasificar",
+      "name": "Clasificar lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Crea o actualiza el lead (email único). En conflicto se reclasifica,\n-- pero la etapa NO se toca: un lead nunca retrocede en el embudo.\nWITH up AS (\n  INSERT INTO leads (nombre, email, telefono, interes, disponibilidad, canal, puntaje, clasificacion)\n  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n  ON CONFLICT (email) DO UPDATE SET\n    nombre = EXCLUDED.nombre,\n    telefono = EXCLUDED.telefono,\n    interes = EXCLUDED.interes,\n    disponibilidad = EXCLUDED.disponibilidad,\n    canal = EXCLUDED.canal,\n    puntaje = EXCLUDED.puntaje,\n    clasificacion = EXCLUDED.clasificacion,\n    updated_at = now()\n  RETURNING id, nombre, email, token, etapa, clasificacion, puntaje, (xmax = 0) AS es_nuevo\n), hist AS (\n  INSERT INTO historial_etapas (lead_id, etapa_anterior, etapa_nueva, origen)\n  SELECT id, NULL, 'Nuevo', 'flujo_01:registro' FROM up WHERE es_nuevo\n)\nSELECT * FROM up;",
+        "options": {
+          "queryReplacement": "={{ [ $json.nombre, $json.email, $json.telefono, $json.interes, $json.disponibilidad, $json.canal, $json.puntaje, $json.clasificacion ] }}"
+        }
+      },
+      "id": "f1-pg-upsert",
+      "name": "Guardar lead (upsert)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "renaserPgCrm0001",
+          "name": "Postgres CRM (local)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f1-if-avanzado-c1",
+              "leftValue": "={{ ['Confirmado', 'Asistió', 'No_asistió'].includes($json.etapa) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1-if-avanzado",
+      "name": "¿Ya confirmado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f1-noop-fin",
+      "name": "Sin reenvío (ya avanzó)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        880,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Arma el correo de seguimiento según la clasificación del lead.\n// El botón apunta al webhook del flujo 02 con el token opaco del lead.\nconst BASE_URL = 'http://localhost:5678';\nconst lead = $json;\nconst enlace = `${BASE_URL}/webhook/confirmar?token=${lead.token}`;\nconst nombre = lead.nombre.split(' ')[0];\n\nconst boton = `\n  <p style=\"margin:28px 0\">\n    <a href=\"${enlace}\" style=\"background:#6d28d9;color:#fff;padding:14px 26px;\n       border-radius:8px;text-decoration:none;font-weight:bold\">Confirmo mi asistencia</a>\n  </p>`;\n\nconst plantillas = {\n  'Caliente': {\n    asunto: `${nombre}, tu lugar en el evento está reservado 🎟️`,\n    cuerpo: `<p>¡Gracias por registrarte! Vimos que tienes alto interés y disponibilidad.</p>\n             <p>Solo falta un paso: confirma tu asistencia para asegurar tu cupo.</p>${boton}`,\n  },\n  'Tibio': {\n    asunto: `${nombre}, esto es lo que vivirás en nuestro evento`,\n    cuerpo: `<p>Gracias por tu interés. Te contamos más: agenda, ponentes y beneficios\n             de asistir en persona.</p>\n             <p>Si ya te animaste, confirma aquí y te guardamos un lugar.</p>${boton}`,\n  },\n  'Frío': {\n    asunto: `${nombre}, gracias por tu interés`,\n    cuerpo: `<p>Gracias por registrarte. Te iremos enviando contenido útil y novedades\n             de próximos eventos, sin compromiso.</p>`,\n  },\n};\n\nconst t = plantillas[lead.clasificacion];\nconst html = `<div style=\"font-family:Arial,sans-serif;max-width:560px;color:#1f2937\">\n  <h2 style=\"color:#6d28d9\">Renaser Eventos</h2>\n  <p>Hola ${nombre},</p>${t.cuerpo}\n  <hr style=\"border:none;border-top:1px solid #e5e7eb\">\n  <small style=\"color:#6b7280\">Clasificación interna: ${lead.clasificacion} (${lead.puntaje} pts)</small>\n</div>`;\n\nreturn { json: { ...lead, asunto: t.asunto, html } };\n"
+      },
+      "id": "f1-code-correo",
+      "name": "Armar correo según clasificación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "Renaser Eventos <eventos@renaser.test>",
+        "toEmail": "={{ $json.email }}",
+        "subject": "={{ $json.asunto }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "f1-email",
+      "name": "Enviar correo de seguimiento",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        80
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "renaserSmtp00001",
+          "name": "SMTP Mailpit (local)"
+        }
+      },
+      "webhookId": "2c4e6a8b-0d1f-4a3b-8c5d-7e9f0a1b2c3d"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Nuevo → Contactado (solo si sigue en Nuevo) + registro en historial.\nWITH upd AS (\n  UPDATE leads\n     SET etapa = 'Contactado', fecha_contacto = now(), updated_at = now()\n   WHERE id = $1 AND etapa = 'Nuevo'\n  RETURNING id\n), hist AS (\n  INSERT INTO historial_etapas (lead_id, etapa_anterior, etapa_nueva, origen)\n  SELECT id, 'Nuevo', 'Contactado', 'flujo_01:correo_enviado' FROM upd\n)\nSELECT $1::int AS lead_id,\n       (SELECT count(*) FROM upd)::int AS actualizado,\n       'Contactado' AS etapa_actual;",
+        "options": {
+          "queryReplacement": "={{ [ $('Armar correo según clasificación').item.json.id ] }}"
+        }
+      },
+      "id": "f1-pg-contactado",
+      "name": "Actualizar etapa: Contactado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1320,
+        80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "renaserPgCrm0001",
+          "name": "Postgres CRM (local)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Formulario de registro": {
+      "main": [
+        [
+          {
+            "node": "Clasificar lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar lead": {
+      "main": [
+        [
+          {
+            "node": "Guardar lead (upsert)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar lead (upsert)": {
+      "main": [
+        [
+          {
+            "node": "¿Ya confirmado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Ya confirmado?": {
+      "main": [
+        [
+          {
+            "node": "Sin reenvío (ya avanzó)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Armar correo según clasificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar correo según clasificación": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo de seguimiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar correo de seguimiento": {
+      "main": [
+        [
+          {
+            "node": "Actualizar etapa: Contactado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Lima"
+  },
+  "pinData": {},
+  "tags": []
+}

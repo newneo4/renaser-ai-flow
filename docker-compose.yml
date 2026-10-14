@@ -1,0 +1,81 @@
+# =============================================================
+# renaser-ai-flow · Prototipo funcional
+# registro → almacenamiento → clasificación → seguimiento → estado
+#
+#   n8n      → http://localhost:5678   (editor, formulario y webhooks)
+#   Mailpit  → http://localhost:8025   (bandeja donde llegan los correos)
+#   Postgres → localhost:5433          (mini-CRM, base "crm")
+# =============================================================
+
+x-n8n-env: &n8n-env
+  N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-renaser-demo-key-solo-local}
+  GENERIC_TIMEZONE: ${TZ:-America/Lima}
+  TZ: ${TZ:-America/Lima}
+  N8N_DIAGNOSTICS_ENABLED: "false"
+  N8N_PERSONALIZATION_ENABLED: "false"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: renaser-postgres
+    environment:
+      POSTGRES_DB: crm
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm_local_2026   # solo local; debe coincidir con n8n/credentials
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"   # 5433 para no chocar con un Postgres local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: renaser-mailpit
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "8025:8025"   # interfaz web / API
+      - "1025:1025"   # SMTP
+
+  # Servicio de un solo uso: espera a que n8n esté listo y activa los flujos
+  # importados vía la API REST interna (evita restricciones de modo multi-main).
+  n8n-import:
+    image: n8nio/n8n:2.43.5
+    container_name: renaser-n8n-import
+    environment:
+      <<: *n8n-env
+    entrypoint: ["sh", "/import/import.sh"]
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/import:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  n8n:
+    image: n8nio/n8n:2.43.5
+    container_name: renaser-n8n
+    environment:
+      <<: *n8n-env
+      N8N_WEBHOOK_URL: http://localhost:5678/
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      n8n-import:
+        condition: service_completed_successfully
+
+volumes:
+  pg_data:
+  n8n_data:
