@@ -18,16 +18,17 @@ Flujo **registro ficticio → almacenamiento → clasificación → seguimiento 
 
 ```bash
 # 1. Clonar el repo
-git clone <URL> renaser-ia-flow && cd renaser-ia-flow
+git clone https://github.com/newneo4/renaser-ai-flow.git && cd renaser-ia-flow
 
 # 2. Levantar todo
 docker compose up -d
 
 # 3. Abrir el editor (primera vez pedirá crear cuenta de propietario)
-open http://localhost:5678
+#    En macOS usa 'open' en lugar de 'xdg-open'
+xdg-open http://localhost:5678
 
 # 4. Ver la bandeja de correos
-open http://localhost:8025
+xdg-open http://localhost:8025
 ```
 
 El servicio `n8n-import` importa credenciales y flujos automáticamente antes de que n8n arranque. Los flujos quedan publicados (activos) desde el primer boot.

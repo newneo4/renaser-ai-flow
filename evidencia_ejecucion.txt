@@ -1,0 +1,127 @@
+===============================================================
+EVIDENCIA — Ejecución de principio a fin con un registro ficticio
+Fecha y hora: 2026-10-14 14:50:03 (America/Lima)
+===============================================================
+
+
+---------------------------------------------------------------
+PASO 1 — REGISTRO: envío del formulario (lead ficticio)
+---------------------------------------------------------------
+
+Datos enviados al formulario en http://localhost:5678/form/registro :
+  Nombre:         María López Evidencia
+  Email:          maria.evidencia@demo.test
+  Teléfono:       +51 912 345 678
+  Interés:        Alto
+  Disponibilidad: Sí
+  Canal:          Referido
+
+Respuesta HTTP del servidor: 200 (registro recibido correctamente)
+
+
+---------------------------------------------------------------
+PASO 2 — CLASIFICACIÓN: puntaje y categoría asignados
+---------------------------------------------------------------
+
+Reglas aplicadas por el nodo Code:
+  Interés = Alto          -->  40 pts
+  Disponibilidad = Sí     -->  40 pts
+  Canal = Referido        -->  20 pts
+  ---------------------------------
+  TOTAL                   = 100 pts
+  Resultado: CALIENTE (>= 70 puntos)
+
+
+---------------------------------------------------------------
+PASO 3 — ALMACENAMIENTO: lead guardado en PostgreSQL (CRM)
+---------------------------------------------------------------
+
+Consulta SQL: SELECT nombre, email, telefono, interes, disponibilidad,
+  canal, puntaje, clasificacion, etapa, token FROM leads WHERE email = '...';
+
+Resultado:
+  Nombre:         María López Evidencia
+  Email:          maria.evidencia@demo.test
+  Teléfono:       +51 912 345 678
+  Interés:        Alto
+  Disponibilidad: Sí
+  Canal:          Referido
+  Puntaje:        100
+  Clasificación:  Caliente
+  Etapa:          Contactado
+  Token:          5d108652-4d8b-4a60-b263-f846734e8d09
+
+
+---------------------------------------------------------------
+PASO 4 — SEGUIMIENTO: correo enviado (bandeja Mailpit)
+---------------------------------------------------------------
+
+Consulta a la API de Mailpit:
+
+  De:       eventos@renaser.test
+  Para:     maria.evidencia@demo.test
+  Asunto:   María, tu lugar en el evento está reservado
+  Recibido: 2026-10-14T19:50:04.079Z
+
+Contenido del correo (texto extraído del HTML):
+  Renaser Eventos
+  Hola María,
+  ¡Gracias por registrarte! Vimos que tienes alto interés y disponibilidad.
+  Solo falta un paso: confirma tu asistencia para asegurar tu cupo.
+  [Botón: Confirmo mi asistencia]
+  Clasificación interna: Caliente (100 pts)
+
+
+---------------------------------------------------------------
+PASO 5 — ESTADO ACTUALIZADO: Nuevo --> Contactado
+---------------------------------------------------------------
+
+Consulta: SELECT etapa, fecha_contacto FROM leads WHERE email = '...';
+
+  Etapa actual:      Contactado
+  Fecha de contacto: 2026-10-14 19:50:04
+
+Historial de etapas:
+  (inicio)    --> Nuevo        [flujo_01:registro]         2026-10-14 19:50:04
+  Nuevo       --> Contactado   [flujo_01:correo_enviado]   2026-10-14 19:50:04
+
+
+---------------------------------------------------------------
+PASO 6 — CONFIRMACIÓN: clic en el enlace del correo
+---------------------------------------------------------------
+
+Token del lead: 5d108652-4d8b-4a60-b263-f846734e8d09
+URL del botón:  http://localhost:5678/webhook/confirmar?token=5d108652-4d8b-4a60-b263-f846734e8d09
+
+Respuesta del webhook (texto extraído del HTML):
+  ¡Asistencia confirmada!
+  Gracias María López Evidencia, tu lugar está asegurado.
+  Te enviaremos un recordatorio antes del evento.
+
+
+---------------------------------------------------------------
+PASO 7 — ESTADO FINAL del contacto
+---------------------------------------------------------------
+
+Lead en el CRM (estado final):
+  Nombre:            María López Evidencia
+  Email:             maria.evidencia@demo.test
+  Puntaje:           100
+  Clasificación:     Caliente
+  Etapa final:       Confirmado
+  Fecha contacto:    2026-10-14 19:50:04
+  Fecha confirmación:2026-10-14 19:50:07
+
+Historial completo de etapas:
+  (inicio)    --> Nuevo        [flujo_01:registro]            2026-10-14 19:50:04
+  Nuevo       --> Contactado   [flujo_01:correo_enviado]      2026-10-14 19:50:04
+  Contactado  --> Confirmado   [flujo_02:clic_confirmacion]   2026-10-14 19:50:07
+
+Vista del embudo (todos los leads del CRM):
+  Confirmado | Caliente | 3 lead(s)
+  Contactado | Frío     | 1 lead(s)
+  Contactado | Tibio    | 1 lead(s)
+
+===============================================================
+FIN DE LA EVIDENCIA
+===============================================================
